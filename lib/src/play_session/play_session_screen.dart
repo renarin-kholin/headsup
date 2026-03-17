@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +11,7 @@ import '../ads/ads_controller.dart';
 import '../audio/audio_controller.dart';
 import '../audio/sounds.dart';
 import '../game_internals/level_state.dart';
+import '../game_rooms/game_room.dart';
 import '../games_services/games_services.dart';
 import '../games_services/score.dart';
 import '../in_app_purchase/in_app_purchase.dart';
@@ -19,9 +21,13 @@ import '../style/confetti.dart';
 import '../style/palette.dart';
 
 class PlaySessionScreen extends StatefulWidget {
-  final Team level;
+  final Team? team;
+  final GameRoom? gameRoom;
 
-  const PlaySessionScreen(this.level, {super.key});
+  const PlaySessionScreen(this.team, {super.key}) : gameRoom = null;
+
+  const PlaySessionScreen.forCustomRoom(this.gameRoom, {super.key})
+      : team = null;
 
   @override
   State<PlaySessionScreen> createState() => _PlaySessionScreenState();
@@ -47,12 +53,58 @@ class _PlaySessionScreenState extends State<PlaySessionScreen> {
   final List<AccelerometerEvent> _accelerometerValues = [];
   late StreamSubscription<AccelerometerEvent> _accelerometerSubscription;
 
+  bool get _isCustomRoom => widget.gameRoom != null;
+
+  List<String> get _words =>
+      _isCustomRoom ? widget.gameRoom!.words : widget.team!.words;
+
+  List<String> get _imagePaths =>
+      _isCustomRoom ? widget.gameRoom!.imagePaths : widget.team!.imagePaths;
+
+  int get _difficulty =>
+      _isCustomRoom ? widget.gameRoom!.difficulty : widget.team!.difficulty;
+
+  String get _displayName =>
+      _isCustomRoom ? widget.gameRoom!.name : 'Team ${widget.team!.number}';
+
+  int get _levelNumber => _isCustomRoom ? 0 : widget.team!.number;
+
+  bool get _awardsAchievement =>
+      !_isCustomRoom && widget.team!.awardsAchievement;
+
+  String? get _achievementIdAndroid =>
+      !_isCustomRoom ? widget.team!.achievementIdAndroid : null;
+  String? get _achievementIdIOS =>
+      !_isCustomRoom ? widget.team!.achievementIdIOS : null;
+
+  bool get _useFileImages => _isCustomRoom;
+
+  Widget _buildImage(String imagePath, double height) {
+    if (_useFileImages) {
+      final file = File(imagePath);
+      if (file.existsSync()) {
+        return Image.file(
+          file,
+          fit: BoxFit.contain,
+          height: height,
+        );
+      }
+      return Icon(Icons.broken_image, size: height * 0.5, color: Colors.grey);
+    }
+    return Image.asset(
+      imagePath,
+      fit: BoxFit.contain,
+      height: height,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     _startCountdown();
 
-    final adsRemoved = context.read<InAppPurchaseController?>()?.adRemoval.active ?? false;
+    final adsRemoved =
+        context.read<InAppPurchaseController?>()?.adRemoval.active ?? false;
     if (!adsRemoved) {
       context.read<AdsController?>()?.preloadAd();
     }
@@ -111,7 +163,7 @@ class _PlaySessionScreenState extends State<PlaySessionScreen> {
   }
 
   int get _maxItems =>
-      [widget.level.imagePaths.length, widget.level.words.length].reduce((a, b) => a > b ? a : b);
+      [_imagePaths.length, _words.length].reduce((a, b) => a > b ? a : b);
 
   void _nextWord() {
     if (_currentWordIndex < _maxItems - 1) {
@@ -141,7 +193,7 @@ class _PlaySessionScreenState extends State<PlaySessionScreen> {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => LevelState(goal: widget.level.difficulty, onWin: _playerWon),
+          create: (_) => LevelState(goal: _difficulty, onWin: _playerWon),
         ),
       ],
       child: IgnorePointer(
@@ -157,9 +209,10 @@ class _PlaySessionScreenState extends State<PlaySessionScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 20.0),
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        final hasImage = _currentWordIndex < widget.level.imagePaths.length;
-                        final hasWord = _currentWordIndex < widget.level.words.length;
-                        final wordText = hasWord ? widget.level.words[_currentWordIndex] : '';
+                        final hasImage = _currentWordIndex < _imagePaths.length;
+                        final hasWord = _currentWordIndex < _words.length;
+                        final wordText =
+                            hasWord ? _words[_currentWordIndex] : '';
 
                         return Center(
                           child: Column(
@@ -175,7 +228,6 @@ class _PlaySessionScreenState extends State<PlaySessionScreen> {
                                   ),
                                 )
                               else if (!hasImage && hasWord)
-                              // Word-only layout (big and centered)
                                 Text(
                                   wordText,
                                   style: const TextStyle(
@@ -186,33 +238,32 @@ class _PlaySessionScreenState extends State<PlaySessionScreen> {
                                   textAlign: TextAlign.center,
                                 )
                               else if (hasImage || hasWord)
-                                // Word + Image layout
-                                  Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (hasImage)
-                                        Flexible(
-                                          child: Image.asset(
-                                            widget.level.imagePaths[_currentWordIndex],
-                                            fit: BoxFit.contain,
-                                            height: constraints.maxHeight * 0.4,
-                                          ),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (hasImage)
+                                      Flexible(
+                                        child: _buildImage(
+                                          _imagePaths[_currentWordIndex],
+                                          constraints.maxHeight * 0.4,
                                         ),
-                                      if (hasWord)
-                                        Padding(
-                                          padding: const EdgeInsets.only(top: 16.0),
-                                          child: Text(
-                                            wordText,
-                                            style: const TextStyle(
-                                              fontSize: 30,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.black,
-                                            ),
-                                            textAlign: TextAlign.center,
+                                      ),
+                                    if (hasWord)
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(top: 16.0),
+                                        child: Text(
+                                          wordText,
+                                          style: const TextStyle(
+                                            fontSize: 30,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.black,
                                           ),
+                                          textAlign: TextAlign.center,
                                         ),
-                                    ],
-                                  ),
+                                      ),
+                                  ],
+                                ),
                               const SizedBox(height: 24),
                               Text(
                                 'Correct Guesses: $_corrctWords',
@@ -291,15 +342,17 @@ class _PlaySessionScreenState extends State<PlaySessionScreen> {
   }
 
   Future<void> _playerWon() async {
-    _log.info('Level ${widget.level.number} won');
+    _log.info('$_displayName won');
 
     final score = Score(
-      widget.level.number,
+      _levelNumber,
       _corrctWords,
       DateTime.now().difference(_startOfPlay),
     );
 
-    context.read<PlayerProgress>().setLevelReached(widget.level.number);
+    if (!_isCustomRoom) {
+      context.read<PlayerProgress>().setLevelReached(widget.team!.number);
+    }
 
     await Future.delayed(_preCelebrationDuration);
     if (!mounted) return;
@@ -308,10 +361,10 @@ class _PlaySessionScreenState extends State<PlaySessionScreen> {
     context.read<AudioController>().playSfx(SfxType.over);
 
     final gamesServices = context.read<GamesServicesController?>();
-    if (gamesServices != null && widget.level.awardsAchievement) {
+    if (gamesServices != null && _awardsAchievement) {
       await gamesServices.awardAchievement(
-        android: widget.level.achievementIdAndroid!,
-        iOS: widget.level.achievementIdIOS!,
+        android: _achievementIdAndroid!,
+        iOS: _achievementIdIOS!,
       );
       await gamesServices.submitLeaderboardScore(score);
     }

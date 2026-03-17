@@ -20,6 +20,9 @@ import 'package:provider/provider.dart';
 import 'src/ads/ads_controller.dart';
 import 'src/app_lifecycle/app_lifecycle.dart';
 import 'src/audio/audio_controller.dart';
+import 'src/game_rooms/game_room_editor_screen.dart';
+import 'src/game_rooms/game_rooms.dart';
+import 'src/game_rooms/persistence/local_storage_game_room_persistence.dart';
 import 'src/games_services/games_services.dart';
 import 'src/games_services/score.dart';
 import 'src/in_app_purchase/in_app_purchase.dart';
@@ -118,6 +121,31 @@ class MyApp extends StatelessWidget {
                     ),
                 routes: [
                   GoRoute(
+                    path: 'editor',
+                    pageBuilder: (context, state) => buildMyTransition<void>(
+                      key: const ValueKey('editor'),
+                      child: const GameRoomEditorScreen(
+                        key: Key('room editor'),
+                      ),
+                      color: context.watch<Palette>().backgroundLevelSelection,
+                    ),
+                  ),
+                  GoRoute(
+                    path: 'editor/:roomId',
+                    pageBuilder: (context, state) {
+                      final roomId = state.pathParameters['roomId'];
+                      return buildMyTransition<void>(
+                        key: const ValueKey('editor'),
+                        child: GameRoomEditorScreen(
+                          roomId: roomId,
+                          key: const Key('room editor'),
+                        ),
+                        color:
+                            context.watch<Palette>().backgroundLevelSelection,
+                      );
+                    },
+                  ),
+                  GoRoute(
                     path: 'session/:level',
                     pageBuilder: (context, state) {
                       final levelNumber =
@@ -128,6 +156,31 @@ class MyApp extends StatelessWidget {
                         key: const ValueKey('level'),
                         child: PlaySessionScreen(
                           level,
+                          key: const Key('play session'),
+                        ),
+                        color: context.watch<Palette>().backgroundPlaySession,
+                      );
+                    },
+                  ),
+                  GoRoute(
+                    path: 'session/room/:roomId',
+                    pageBuilder: (context, state) {
+                      final roomId = state.pathParameters['roomId']!;
+                      final gameRooms = context.read<GameRooms>();
+                      final room = gameRooms.getRoomById(roomId);
+                      if (room == null) {
+                        return buildMyTransition<void>(
+                          key: const ValueKey('notfound'),
+                          child: const Scaffold(
+                            body: Center(child: Text('Room not found')),
+                          ),
+                          color: context.watch<Palette>().backgroundPlaySession,
+                        );
+                      }
+                      return buildMyTransition<void>(
+                        key: const ValueKey('customroom'),
+                        child: PlaySessionScreen.forCustomRoom(
+                          room,
                           key: const Key('play session'),
                         ),
                         color: context.watch<Palette>().backgroundPlaySession,
@@ -229,6 +282,9 @@ class MyApp extends StatelessWidget {
           ),
           Provider(
             create: (context) => Palette(),
+          ),
+          ChangeNotifierProvider(
+            create: (context) => GameRooms(LocalStorageGameRoomPersistence()),
           ),
         ],
         child: Builder(builder: (context) {

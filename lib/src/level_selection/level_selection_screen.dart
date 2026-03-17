@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../audio/audio_controller.dart';
 import '../audio/sounds.dart';
+import '../game_rooms/game_rooms.dart';
 import '../player_progress/player_progress.dart';
 import '../style/palette.dart';
 import '../style/responsive_screen.dart';
@@ -16,6 +17,7 @@ class LevelSelectionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.watch<Palette>();
     final playerProgress = context.watch<PlayerProgress>();
+    final gameRooms = context.watch<GameRooms>();
 
     return Scaffold(
       backgroundColor: palette.backgroundLevelSelection,
@@ -35,10 +37,100 @@ class LevelSelectionScreen extends StatelessWidget {
             Expanded(
               child: ListView(
                 children: [
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text(
+                      'Custom Rooms',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.add_circle, color: Colors.green),
+                    title: Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Colors.green, Colors.green],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      padding: const EdgeInsets.all(12),
+                      child: const Text(
+                        'Create New Room',
+                        style: TextStyle(fontSize: 18, color: Colors.white),
+                      ),
+                    ),
+                    onTap: () {
+                      final audioController = context.read<AudioController>();
+                      audioController.playSfx(SfxType.buttonTap);
+                      GoRouter.of(context).go('/play/editor');
+                    },
+                  ),
+                  if (gameRooms.rooms.isNotEmpty) ...[
+                    for (final room in gameRooms.rooms)
+                      ListTile(
+                        onTap: () {
+                          final audioController =
+                              context.read<AudioController>();
+                          audioController.playSfx(SfxType.buttonTap);
+                          GoRouter.of(context)
+                              .go('/play/session/room/${room.id}');
+                        },
+                        leading: const Icon(Icons.group, color: Colors.amber),
+                        title: Container(
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Colors.amber, Colors.orange],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            room.name,
+                            style: const TextStyle(
+                                fontSize: 18, color: Colors.white),
+                          ),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.white),
+                              onPressed: () {
+                                GoRouter.of(context)
+                                    .go('/play/editor/${room.id}');
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _showDeleteDialog(
+                                  context, room.id, room.name),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    child: Text(
+                      'Preset Teams',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
                   for (final level in teams)
                     ListTile(
-                      enabled: true, //playerProgress.highestLevelReached >=
-                          //level.number - 1,
+                      enabled: true,
                       onTap: () {
                         final audioController = context.read<AudioController>();
                         audioController.playSfx(SfxType.buttonTap);
@@ -49,10 +141,6 @@ class LevelSelectionScreen extends StatelessWidget {
                       leading: Icon(
                         Icons.group,
                         color: Colors.white,
-                        //playerProgress.highestLevelReached >=
-                                //level.number - 1
-                           // ? Colors.white
-                           // : Colors.grey,
                       ),
                       title: Container(
                         decoration: BoxDecoration(
@@ -107,53 +195,26 @@ class LevelSelectionScreen extends StatelessWidget {
       ),
     );
   }
-}
 
-class ImprovedContainer extends StatelessWidget {
-  final int levelNumber;
-
-  const ImprovedContainer({super.key, required this.levelNumber});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            Color.fromARGB(255, 91, 160, 192),
-            Color.fromARGB(255, 40, 120, 180),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(120),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            spreadRadius: 2,
-            blurRadius: 10,
-            offset: const Offset(0, 5), // changes position of shadow
+  void _showDeleteDialog(BuildContext context, String roomId, String roomName) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Room'),
+        content: Text('Are you sure you want to delete "$roomName"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              context.read<GameRooms>().deleteRoom(roomId);
+              Navigator.of(ctx).pop();
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
-      ),
-      child: Center(
-        child: Text(
-          'Team $levelNumber',
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-            shadows: [
-              Shadow(
-                blurRadius: 10.0,
-                color: Colors.black38,
-                offset: Offset(2, 2),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
